@@ -8,6 +8,10 @@ from bs4 import BeautifulSoup
 #from lxml import etree
 from plugins import register, Plugin, Event, logger, Reply, ReplyType
 from utils.api import send_txt
+import ssl
+
+# 忽略SSL证书错误
+ssl._create_default_https_context = ssl._create_unverified_context
 
 @register
 class TgChannelSub(Plugin):
@@ -42,16 +46,16 @@ class TgChannelSub(Plugin):
         pass
 
     def help(self, **kwargs) -> str:
-        return "TG 频道订阅"
+        return "NodeSeek 频道订阅"
 
     def start_schedule(self):
-        schedule.every().minute.do(self.auto_send)
+        schedule.every(30).minutes.do(self.auto_send)
         #while True:
         #    schedule.run_pending()
         #    time.sleep(600)
 
     def auto_send(self):
-        logger.info("Start TG Channel Sub Auto Send")
+        logger.info("Start NodeSeek Channel Sub Auto Send")
         single_chat_list = self.config.get("single_chat_list", [])
         group_chat_list = self.config.get("group_chat_list", [])
         content = self.tg_channel_msg()
@@ -71,7 +75,7 @@ class TgChannelSub(Plugin):
             feed = feedparser.parse(self.rss_url)
     
             # 遍历订阅的条目，获取最新的消息
-            for entry in feed.entries:
+            for entry in reversed(feed.entries):
                 # 获取消息链接
                 entry_link = entry.link
     
@@ -79,16 +83,29 @@ class TgChannelSub(Plugin):
                 if entry_link not in self.processed_links:
                     self.processed_links.add(entry.link)  # 使用成员变量
                     print(f"{entry.link} added to the processed list")
-    
-                    # 获取消息标题和描述
-                    entry_title = entry.title
-                    entry_description = BeautifulSoup(entry.description, 'html.parser').get_text()
+
+                    # 获取消息描述，并进行格式化输出
+                    soup = BeautifulSoup(entry.description, 'html.parser')
+                    
+                    news_title = soup.find('b').get_text()
+                    news_link = soup.find('a')['href']
+                    
+                    if soup.find('blockquote'):
+                        summary_content = soup.find('blockquote').get_text()
+                        links = soup.find_all('a', href=True)
+                        for link in links:
+                            summary_content = summary_content.replace(link.get_text(), f'({link["href"]})')
+                        formatted_msg += f"【{news_title}】( {news_link} )\n摘要: {summary_content[8:]}"
+                    else:
+                        formatted_msg += f"【{news_title}】( {news_link} )"
+
+                
     
                     # 打印消息标题和描述
                     #print("标题:", entry_title)
                     #print("描述:", entry_description)
                     #print("=" * 40)
-                    formatted_msg += f"{entry_title} : {entry_description} \n\n\n"
+                    formatted_msg += "\n\n-----------------------\n\n"
                     print(formatted_msg)
 
         except Exception as e:
